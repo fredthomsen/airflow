@@ -54,6 +54,7 @@ from airflow.models.expandinput import (
     EXPAND_INPUT_EMPTY,
     DictOfListsExpandInput,
     ListOfDictsExpandInput,
+    DictOfDictsExpandInput,
     is_mappable,
 )
 from airflow.models.mappedoperator import MappedOperator, ensure_xcomarg_return_value
@@ -418,10 +419,19 @@ class _TaskDecorator(ExpandableFactory, Generic[FParams, FReturn, OperatorSubcla
         if isinstance(kwargs, Sequence):
             for item in kwargs:
                 if not isinstance(item, (XComArg, Mapping)):
-                    raise TypeError(f"expected XComArg or list[dict], not {type(kwargs).__name__}")
+                    raise TypeError(f"expected XComArg, list[dict], or dict[str, dict], not {type(kwargs).__name__}")
+        elif isinstance(kwargs, dict):
+            for key, item in kwargs.items():
+                if not isinstance(key, str):
+                    raise TypeError(f"expected XComArg, list[dict], or dict[str, dict], not {type(kwargs).__name__}")
+                if not isinstance(item, (XComArg, Mapping)):
+                    raise TypeError(f"expected XComArg, list[dict], or dict[str, dict] not {type(kwargs).__name__}")
         elif not isinstance(kwargs, XComArg):
-            raise TypeError(f"expected XComArg or list[dict], not {type(kwargs).__name__}")
-        return self._expand(ListOfDictsExpandInput(kwargs), strict=strict)
+            raise TypeError(f"expected XComArg, list[dict], or dict[str, dict] not {type(kwargs).__name__}")
+        return self._expand(
+            ListOfDictsExpandInput(kwargs) if not isinstance(kwargs, dict) else DictOfDictsExpandInput(kwargs),
+            strict=strict
+        )
 
     def _expand(self, expand_input: ExpandInput, *, strict: bool) -> XComArg:
         ensure_xcomarg_return_value(expand_input.value)

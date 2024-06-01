@@ -562,6 +562,7 @@ def test_mapped_render_nested_template_fields(dag_maker, session):
     ),
 )
 def test_expand_kwargs_mapped_task_instance(dag_maker, session, num_existing_tis, expected):
+    # FREDNOTE: A similar test case should be made here to handle this....
     literal = [{"arg1": "a"}, {"arg1": "b"}, {"arg1": "c"}]
     with dag_maker(session=session):
         task1 = BaseOperator(task_id="op1")

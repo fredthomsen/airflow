@@ -37,15 +37,22 @@ if TYPE_CHECKING:
     from airflow.typing_compat import TypeGuard
     from airflow.utils.context import Context
 
-ExpandInput = Union["DictOfListsExpandInput", "ListOfDictsExpandInput"]
+ExpandInput = Union["DictOfListsExpandInput", "ListOfDictsExpandInput", "DictOfDictsExpandInput"]
 
 # Each keyword argument to expand() can be an XComArg, sequence, or dict (not
 # any mapping since we need the value to be ordered).
 OperatorExpandArgument = Union["MappedArgument", "XComArg", Sequence, Dict[str, Any]]
 
-# The single argument of expand_kwargs() can be an XComArg, or a list with each
-# element being either an XComArg or a dict.
-OperatorExpandKwargsArgument = Union["XComArg", Sequence[Union["XComArg", Mapping[str, Any]]]]
+_OperatorExpandKwargsArgumentIterableElement = Union["XComArg", Mapping[str, Any]]
+# The single argument of expand_kwargs() can be an XComArg, a list with each
+# element being either a XComArg or a dict, or a dict with the key being the
+# name of the mapped task instance and the value being either a XComArg or a
+# dict
+OperatorExpandKwargsArgument = Union[
+    "XComArg",
+    Sequence[_OperatorExpandKwargsArgumentIterableElement],
+    Dict[str, _OperatorExpandKwargsArgumentIterableElement],
+]
 
 
 @attr.define(kw_only=True)
@@ -212,6 +219,7 @@ def _describe_type(value: Any) -> str:
     return type(value).__name__
 
 
+# FREDNOTE: pay attention here.
 class ListOfDictsExpandInput(NamedTuple):
     """Storage type of a mapped operator's mapped kwargs.
 
@@ -274,11 +282,63 @@ class ListOfDictsExpandInput(NamedTuple):
         return mapping, resolved_oids
 
 
+class DictOfDictsExpandInput(ListOfDictsExpandInput):  # NOTE: isinstance checks??
+    """Storage type of a mapped operator's mapped kwargs.
+
+    This is created from ``expand_kwargs(xcom_arg)`` when xcom_arg resolves to a dict.
+
+    NOTE: Only exists for ``expand_kwargs``.  Given ``expand`` creates a cross product w/multiple params, this doesn't
+    make sense.
+    """
+
+    def iter_references(self) -> Iterable[tuple[Operator, str]]:
+        from airflow.models.xcom_arg import XComArg
+
+        if isinstance(self.value, XComArg):
+            yield from self.value.iter_references()
+        else:
+            for x in self.value.values():
+                if isinstance(x, XComArg):
+                    yield from x.iter_references()
+
+    def resolve(self, context: Context, session: Session) -> tuple[Mapping[str, Any], set[int]]:
+        # NOTE: Can I set the context on resolve?? ie set render_map_index??
+        map_index = context["ti"].map_index
+        if map_index < 0:
+            raise RuntimeError("can't resolve task-mapping argument without expanding")
+
+        mapping: Any
+        if isinstance(self.value, collections.abc.Sized):
+            mapping = self.value[map_index]
+            if not isinstance(mapping, collections.abc.Mapping):
+                mapping = mapping.resolve(context, session)
+        else:
+            mappings = self.value.resolve(context, session)
+            if not isinstance(mappings, collections.abc.Sequence):
+                raise ValueError(f"expand_kwargs() expects a dict[dict], not {_describe_type(mappings)}")
+            mapping = mappings[map_index]
+
+        if not isinstance(mapping, collections.abc.Mapping):
+            raise ValueError(f"expand_kwargs() expects a dict[dict], not dict[{_describe_type(mapping)}]")
+
+        for key in mapping:
+            if not isinstance(key, str):
+                raise ValueError(
+                    f"expand_kwargs() input dict keys must all be str, "
+                    f"but {key!r} is of type {_describe_type(key)}"
+                )
+        # filter out parse time resolved values from the resolved_oids
+        resolved_oids = {id(v) for k, v in mapping.items() if not _is_parse_time_mappable(v)}
+
+        return mapping, resolved_oids
+
+
 EXPAND_INPUT_EMPTY = DictOfListsExpandInput({})  # Sentinel value.
 
 _EXPAND_INPUT_TYPES = {
     "dict-of-lists": DictOfListsExpandInput,
     "list-of-dicts": ListOfDictsExpandInput,
+    "dict-of-dicts": DictOfDictsExpandInput,
 }
 
 

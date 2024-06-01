@@ -785,6 +785,7 @@ class MappedOperator(AbstractOperator):
         return getattr(self, self._expand_input_attr)
 
     def prepare_for_execution(self) -> MappedOperator:
+        # FREDNOTE: look here
         # Since a mapped operator cannot be used for execution, and an unmapped
         # BaseOperator needs to be created later (see render_template_fields),
         # we don't need to create a copy of the MappedOperator here.

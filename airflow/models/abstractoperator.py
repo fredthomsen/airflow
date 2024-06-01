@@ -545,6 +545,7 @@ class AbstractOperator(Templater, DAGNode):
             raise NotMapped
         return group.get_mapped_ti_count(run_id, session=session)
 
+    # FREDNOTE: This might be it where tasks are expanded
     def expand_mapped_task(self, run_id: str, *, session: Session) -> tuple[Sequence[TaskInstance], int]:
         """Create the mapped task instances for mapped task.
 
@@ -643,7 +644,9 @@ class AbstractOperator(Templater, DAGNode):
 
         for index in indexes_to_map:
             # TODO: Make more efficient with bulk_insert_mappings/bulk_save_mappings.
-            ti = TaskInstance(self, run_id=run_id, map_index=index, state=state)
+            # FREDNOTE: Can we add information in regards to rendered map index here....
+            # FREDNOTE: Pull data from TaskInstance methods??
+            ti = TaskInstance(self, run_id=run_id, map_index=index, state=state, rendered_map_index=)#FREDNOTE
             self.log.debug("Expanding TIs upserted %s", ti)
             task_instance_mutation_hook(ti)
             ti = session.merge(ti)

@@ -33,6 +33,7 @@ import attr
 
 from airflow.decorators.base import ExpandableFactory
 from airflow.models.expandinput import (
+    DictOfDictsExpandInput,
     DictOfListsExpandInput,
     ListOfDictsExpandInput,
     MappedArgument,
@@ -142,9 +143,15 @@ class _TaskGroupFactory(ExpandableFactory, Generic[FParams, FReturn]):
         if isinstance(kwargs, Sequence):
             for item in kwargs:
                 if not isinstance(item, (XComArg, Mapping)):
-                    raise TypeError(f"expected XComArg or list[dict], not {type(kwargs).__name__}")
+                    raise TypeError(f"expected XComArg, list[dict], or dict[str, dict], not {type(kwargs).__name__}")
+        elif isinstance(kwargs, dict):
+            for key, item in kwargs.items():
+                if not isinstance(key, str):
+                    raise TypeError(f"expected XComArg, list[dict], or dict[str, dict] not {type(kwargs).__name__}")
+                if not isinstance(item, (XComArg, Mapping)):
+                    raise TypeError(f"expected XComArg, list[dict], or dict[str, dict] not {type(kwargs).__name__}")
         elif not isinstance(kwargs, XComArg):
-            raise TypeError(f"expected XComArg or list[dict], not {type(kwargs).__name__}")
+            raise TypeError(f"expected XComArg, list[dict], or dict[str, dict] not {type(kwargs).__name__}")
 
         # It's impossible to build a dict of stubs as keyword arguments if the
         # function uses * or ** wildcard arguments.
@@ -160,7 +167,10 @@ class _TaskGroupFactory(ExpandableFactory, Generic[FParams, FReturn]):
         # for every argument, including those with default values.
         map_kwargs = (k for k in self.function_signature.parameters if k not in self.partial_kwargs)
 
-        expand_input = ListOfDictsExpandInput(kwargs)
+        if isinstance(kwargs, dict):
+            expand_input = DictOfDictsExpandInput(kwargs)
+        else:
+            expand_input = ListOfDictsExpandInput(kwargs)
         return self._create_task_group(
             functools.partial(MappedTaskGroup, expand_input=expand_input),
             **self.partial_kwargs,
