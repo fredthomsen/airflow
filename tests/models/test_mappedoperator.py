@@ -1749,3 +1749,15 @@ class TestMappedSetupTeardown:
             "group.last": {0: "success", 1: "skipped", 2: "success"},
         }
         assert states == expected
+
+
+def test_unmap_deserialized_mapped_operator(dag_maker):
+    with dag_maker(serialized=True) as dag:
+        mapped = MockOperator.partial(task_id="task", arg1="partial_arg").expand(arg2=["1", "2"])
+
+        mapped
+    mapped_task = dag.get_task("task")
+    unmapped_task = mapped_task.unmap(None)
+
+    assert unmapped_task.task_id == "task"
+    assert unmapped_task.arg1 == "partial_arg"
