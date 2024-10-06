@@ -70,7 +70,7 @@ class ExternalDagLink(BaseOperatorLink):
         )
         query = {
             "dag_id": external_dag_id,
-            "execution_date": ti.execution_date.isoformat(),  # type: ignore[union-attr]
+            "dag_run_id": ti.run_id,
         }
 
         return build_airflow_url_with_query(query)

@@ -1140,7 +1140,7 @@ def test_external_task_sensor_extra_link(
     with app.app_context():
         url = ti.task.get_extra_links(ti, "External DAG")
 
-    assert f"/dags/{expected_external_dag_id}/grid" in url
+    assert f"/dags/{expected_external_dag_id}/grid?dag_run_id={ti.run_id}" in url
 
 
 class TestExternalTaskMarker:
